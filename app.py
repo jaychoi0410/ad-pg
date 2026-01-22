@@ -3,62 +3,84 @@ from google import genai
 from google.genai import types
 import os
 
-# 페이지 설정
-st.set_page_config(page_title="TV 광고 분석기", layout="wide")
-st.title("📺 TV 광고 편성 위치 분석 AI")
+# 1. 페이지 설정 및 제목
+st.set_page_config(page_title="TV 광고 위치 분석기", layout="wide")
+st.title("📺 TV 광고 편성 위치 분석 전문 AI")
+st.write("광고 탐지 결과 및 편성표 엑셀 파일을 업로드하여 정확한 위치(전/중/후)를 판정합니다.")
 
-# API 키 설정 (오류 방지 로직 강화)
+# 2. API 키 설정 (Streamlit 클라우드 배포 시 Secrets 설정 필요)
+# 로컬 테스트 시에는 환경 변수나 직접 입력을 사용할 수 있습니다.
 api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
 
 if not api_key:
-    st.error("🔑 API 키가 설정되지 않았습니다. Streamlit Cloud의 Settings -> Secrets에 GEMINI_API_KEY를 등록해주세요.")
+    st.error("API 키가 설정되지 않았습니다. Streamlit Secrets에 GEMINI_API_KEY를 등록해주세요.")
     st.stop()
 
-# 클라이언트 생성
 client = genai.Client(api_key=api_key)
 
-# 파일 업로드
-uploaded_files = st.file_uploader("분석할 엑셀/CSV 파일 3개를 올려주세요", accept_multiple_files=True, type=['xlsx', 'csv'])
+# 3. 파일 업로드 섹션
+st.subheader("1. 분석 파일 업로드")
+uploaded_files = st.file_uploader(
+    "3개 파일(광고 탐지, 광고 포함 편성표, 광고 제외 편성표)을 한꺼번에 선택해주세요.", 
+    accept_multiple_files=True, 
+    type=['xlsx', 'csv']
+)
 
-if st.button("분석 시작"):
+# 4. 분석 실행 버튼
+if st.button("AI 분석 시작"):
     if len(uploaded_files) >= 3:
-        with st.spinner("AI가 데이터를 정밀 분석 중입니다..."):
+        with st.spinner("AI가 데이터를 매칭하고 분석 중입니다. 잠시만 기다려주세요..."):
             try:
-                # 파일 처리
+                # 파일 데이터를 AI에게 전달할 준비
                 file_parts = []
                 for file in uploaded_files:
-                    m_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" if file.name.endswith('xlsx') else "text/csv"
-                    file_parts.append(types.Part.from_bytes(data=file.read(), mime_type=m_type))
+                    file_bytes = file.read()
+                    file_parts.append(
+                        types.Part.from_bytes(data=file_bytes, mime_type=file.type)
+                    )
 
-                # 모델 설정 (가장 안정적인 1.5-flash 사용)
-                model_id = "gemini-1.5-flash" 
+                # AI Studio에서 가져온 핵심 분석 프롬프트
+                model = "gemini-2.0-flash-exp" # 최신 모델로 유지
                 
-                prompt = "업로드된 파일들을 분석하여 광고 위치(전/중/후)를 판정해줘. Python Code Execution을 사용해서 계산해."
+                # 프롬프트 구성 (사용자님이 작성하신 로직 유지)
+                prompt_text = """당신은 TV 광고 편성 위치(전/중/후) 분석 전문가입니다. 
+                업로드된 파일들을 결합하여 각 광고의 정확한 위치를 판정하고 분석 보고서를 작성하세요."""
                 
                 contents = [
-                    types.Content(role="user", parts=[types.Part.from_text(text=prompt)] + file_parts)
+                    types.Content(
+                        role="user",
+                        parts=[types.Part.from_text(text=prompt_text)] + file_parts
+                    )
                 ]
 
-                # 도구 설정
-                tools = [types.Tool(code_execution=types.ToolCodeExecution)]
+                # 코드 실행 도구 및 검색 도구 설정
+                tools = [
+                    types.Tool(code_execution=types.ToolCodeExecution),
+                    types.Tool(googleSearch=types.GoogleSearch()),
+                ]
 
-                # 결과 출력
-                res_area = st.empty()
-                full_text = ""
-                
+                generate_content_config = types.GenerateContentConfig(
+                    thinking_config=types.ThinkingConfig(thinking_level="HIGH"),
+                    tools=tools,
+                )
+
+                # 결과 출력 영역
+                result_placeholder = st.empty()
+                full_response = ""
+
+                # 스트리밍 출력
                 for chunk in client.models.generate_content_stream(
-                    model=model_id,
+                    model=model,
                     contents=contents,
-                    config=types.GenerateContentConfig(tools=tools)
+                    config=generate_content_config,
                 ):
                     if chunk.text:
-                        full_text += chunk.text
-                        res_area.markdown(full_text)
+                        full_response += chunk.text
+                        result_placeholder.markdown(full_response)
                 
                 st.success("분석이 완료되었습니다!")
 
             except Exception as e:
-                # 에러 메시지를 더 자세히 출력하도록 수정
-                st.error(f"분석 중 오류 발생: {e}")
+                st.error(f"오류가 발생했습니다: {e}")
     else:
-        st.warning("파일을 3개 이상 업로드해야 분석이 가능합니다.")
+        st.warning("분석을 위해 최소 3개의 파일을 업로드해야 합니다.")
