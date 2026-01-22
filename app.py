@@ -39,7 +39,7 @@ if st.button("AI 분석 시작"):
                     )
 
                 # AI Studio 로직 반영
-                model = "gemini-2.0-flash-exp" # 현재 가장 안정적인 최신 모델
+                model = "gemini-1.5-flash" # 현재 가장 안정적인 최신 모델
                 
                 prompt_text = """당신은 TV 광고 편성 위치(전/중/후) 분석 전문가입니다. 업로드된 3개 파일을 결합하여 각 광고의 정확한 위치를 판정하세요.
                 반드시 Python Code Execution을 활용하여 데이터의 시간과 텍스트를 정밀하게 매칭하고 분석 보고서를 작성하세요."""
@@ -83,4 +83,5 @@ if st.button("AI 분석 시작"):
             except Exception as e:
                 st.error(f"분석 중 오류 발생: {e}")
     else:
+
         st.warning("분석을 위해 최소 3개의 파일을 업로드해야 합니다.")
